@@ -30,7 +30,7 @@ circuits-ecdsa2 = { path = "../../../circuits/ecdsa2", features = ["witness"] }
 circuits-bit-plucker = { path = "../../../circuits/bit_plucker" }
 compile-logic = { path = "../../../compile/logic", features = ["witness"] }
 libc = "0.2"
-zstd = "0.13"
+zstd = "0.14.3"
 sha2 = { version = "0.10", features = ["asm"] }
 num-bigint = "0.4"
 mdoc-zk-artifacts = { path = "../artifacts" }
