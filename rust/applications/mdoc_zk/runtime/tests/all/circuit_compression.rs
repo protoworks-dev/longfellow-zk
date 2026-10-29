@@ -22,15 +22,16 @@
 //!   measured with the reference `zstd` 1.5.7 decoder, the C library that both crate versions bind;
 //! - through `decompress_circuits`, each frame yields the two circuits whose identifiers,
 //!   recomputed from their content, hash to the name the file is stored under;
-//! - a circuit compiled now and compressed the way the provider compresses it reads back to the
-//!   archive it was compressed from, and to the circuits the current specification names.
+//! - the circuits of every current (v8) specification, compiled now and compressed the way the
+//!   provider compresses them, read back to the archive they were compressed from, and to the
+//!   circuit pair that specification names.
 
 use std::{
     io::Read,
     path::{Path, PathBuf},
 };
 
-use mdoc_zk_runtime::{decompress_circuits, provider, CURRENT_VERSION};
+use mdoc_zk_runtime::{decompress_circuits, provider, CURRENT_VERSION, CURRENT_ZK_SPECS};
 use runtime_algebra::{gf2_128::Gf2_128Field, p256::P256Field};
 use sha2::{Digest, Sha256};
 
@@ -303,28 +304,52 @@ fn test_checked_in_frames_read_back_to_the_circuits_they_name() {
     }
 }
 
+/// Compiles the circuits of every current (v8) specification, compresses them the way the provider
+/// does, and reads them back.
+///
+/// A specification names its circuit pair by the SHA-256 of the signature circuit's identifier
+/// followed by the hash circuit's: `circuit_id` in the C++ library,
+/// `lib/circuits/mdoc/mdoc_circuit_id.cc:42-83`, documented at
+/// `lib/circuits/mdoc/mdoc_zk.h:186-192`. The C++ `kZkSpecs` stops at version 7, so the v8 table
+/// in `zk_spec.rs` exists only in this crate, and this test is what holds each of its entries to
+/// the circuits the compiler emits.
 #[test]
-fn test_circuit_compiled_now_round_trips_through_zstd() {
+fn test_circuits_compiled_now_round_trip_to_the_v8_specs() {
     let p256 = P256Field::new();
     let gf2 = Gf2_128Field::new();
 
-    let provided = provider::materialize(CURRENT_VERSION, 1).expect("the current circuits compile");
+    let mut mismatches = Vec::new();
+    for spec in &CURRENT_ZK_SPECS {
+        let nattrs = spec.num_attributes;
+        let what = format!("v{CURRENT_VERSION} nattrs={nattrs}");
+
+        let provided = provider::materialize(CURRENT_VERSION, nattrs)
+            .unwrap_or_else(|e| panic!("{what}: the circuits compile: {e:?}"));
+        assert!(
+            provided.compressed.starts_with(&ZSTD_MAGIC),
+            "{what}: the provider hands out a zstd frame"
+        );
+
+        let archive =
+            core_proto::archive::CircuitArchive::from_bytes(&decompress(&provided.compressed))
+                .unwrap_or_else(|e| panic!("{what}: the frame holds a circuit archive: {e}"));
+        assert_eq!(
+            archive, provided.archive,
+            "{what}: the frame decompresses to the archive it was compressed from"
+        );
+
+        let read_back = read_back_name(&p256, &gf2, &provided.compressed, &what);
+        let named = spec.combined_hash_hex();
+        if read_back != named {
+            mismatches.push(format!(
+                "{what}: read back {read_back}, specification names {named}"
+            ));
+        }
+    }
+
     assert!(
-        provided.compressed.starts_with(&ZSTD_MAGIC),
-        "the provider hands out a zstd frame"
-    );
-
-    let archive =
-        core_proto::archive::CircuitArchive::from_bytes(&decompress(&provided.compressed))
-            .expect("the frame holds a circuit archive");
-    assert_eq!(
-        archive, provided.archive,
-        "the frame decompresses to the archive it was compressed from"
-    );
-
-    assert_eq!(
-        read_back_name(&p256, &gf2, &provided.compressed, &provided.name),
-        provided.spec.combined_hash_hex(),
-        "the circuits read back are the ones the current specification names"
+        mismatches.is_empty(),
+        "every v8 specification names the circuits the compiler emits for it:\n{}",
+        mismatches.join("\n")
     );
 }
