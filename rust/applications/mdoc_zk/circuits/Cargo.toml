@@ -68,4 +68,4 @@ core-proto = { path = "../../../core/proto" }
 circuits-ec = { path = "../../../circuits/ec", features = ["testonly"] }
 mdoc-zk-circuits = { path = "./", features = ["testonly"] }
 mdoc-zk-testcases = { path = "../testcases" }
-zstd = "0.13"
+zstd = "0.14.3"
