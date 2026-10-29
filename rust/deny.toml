@@ -1,0 +1,13 @@
+# cargo-deny configuration for the Rust workspace.
+#
+# Only the advisories check is configured: any RustSec advisory against a crate
+# in the resolved graph, with every feature enabled and the dev-dependencies
+# included, fails `cargo deny check advisories`. Nothing is ignored.
+
+[graph]
+all-features = true
+
+[advisories]
+db-urls = ["https://github.com/rustsec/advisory-db"]
+yanked = "deny"
+ignore = []
